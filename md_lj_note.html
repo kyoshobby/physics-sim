@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分子動力学シミュレーション — Lennard-Jones</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #08080f;
+  --surface: #111118;
+  --surface2: #1a1a24;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e8e8f0;
+  --text-muted: #888899;
+  --accent: #6e8fff;
+  --accent2: #a78bfa;
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --font-sans: 'Hiragino Sans', 'Yu Gothic', system-ui, sans-serif;
+  --radius: 10px;
+  --radius-lg: 16px;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 24px 16px 40px;
+  gap: 20px;
+}
+
+header { text-align: center; }
+header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.04em; }
+header p { font-size: 12px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-mono); }
+
+#canvas-wrap { position: relative; width: 100%; max-width: 700px; }
+
+canvas {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--border2);
+}
+
+#overlay-stats {
+  position: absolute;
+  top: 12px; left: 14px;
+  display: flex; flex-direction: column; gap: 3px;
+  pointer-events: none;
+}
+
+.ost {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(200,210,255,0.7);
+  background: rgba(0,0,0,0.45);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+#panel {
+  width: 100%; max-width: 700px;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+
+.temp-bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+
+.temp-bar-label {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-muted);
+}
+
+.temp-bar-track {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.temp-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #4e9eff 0%, #a78bfa 50%, #ff6b6b 100%);
+  transition: width 0.25s ease;
+  max-width: 100%;
+}
+
+.temp-ticks {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-muted); padding: 0 2px;
+}
+
+.sl-group { display: flex; flex-direction: column; gap: 7px; }
+
+.sl-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+
+.sl-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+.sl-val { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent); }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 4px;
+  border-radius: 2px; background: var(--surface2);
+  outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(110,143,255,0.2);
+  transition: box-shadow 0.15s;
+}
+input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 6px rgba(110,143,255,0.25); }
+input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); border: none;
+}
+
+.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.stat {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border);
+  padding: 10px 12px;
+}
+.stat-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.04em; margin-bottom: 4px; }
+.stat-val { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text); }
+
+.btn-row { display: flex; gap: 8px; }
+
+button {
+  flex: 1; padding: 9px 0; font-size: 12px;
+  font-family: var(--font-sans);
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border2);
+  background: transparent; color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.02em;
+}
+button:hover { background: var(--surface2); }
+button:active { transform: scale(0.98); }
+button.primary { border-color: rgba(110,143,255,0.4); color: var(--accent); }
+button.primary:hover { background: rgba(110,143,255,0.1); }
+
+footer {
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-align: center; line-height: 1.8;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>分子動力学シミュレーション</h1>
+  <p>Lennard-Jones Potential · N = 300 · Velocity Verlet · PBC</p>
+</header>
+
+<div id="canvas-wrap">
+  <canvas id="c"></canvas>
+  <div id="overlay-stats">
+    <div class="ost" id="ost-step">step: 0</div>
+    <div class="ost" id="ost-teff">T_eff: —</div>
+  </div>
+</div>
+
+<div id="panel">
+
+  <div class="temp-bar-wrap">
+    <div class="temp-bar-label">
+      <span>温度 T*</span>
+      <span id="phase-label" style="color:var(--accent2)">—</span>
+    </div>
+    <div class="temp-bar-track">
+      <div class="temp-bar-fill" id="temp-bar" style="width:0%"></div>
+    </div>
+    <div class="temp-ticks">
+      <span>1.5</span><span>2.5</span><span>3.5</span><span>5.0</span>
+    </div>
+  </div>
+
+  <div class="sl-group">
+    <div class="sl-header">
+      <span class="sl-label">温度 T*</span>
+      <span class="sl-val" id="v-t">1.50</span>
+    </div>
+    <input type="range" id="sl-t" min="1.5" max="5.0" step="0.05" value="1.5">
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="stat-label">粒子数 N</div><div class="stat-val">300</div></div>
+    <div class="stat"><div class="stat-label">運動エネルギー</div><div class="stat-val" id="s-ke">—</div></div>
+    <div class="stat"><div class="stat-label">実効温度</div><div class="stat-val" id="s-teff">—</div></div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-play" class="primary">⏸ 一時停止</button>
+    <button id="btn-reset">↺ リセット</button>
+  </div>
+
+</div>
+
+<footer>
+  V(r) = 4ε[(σ/r)¹² − (σ/r)⁶] &nbsp;·&nbsp; rc* = 2.5 &nbsp;·&nbsp; ρ* = 0.40 &nbsp;·&nbsp; 周期境界条件<br>
+  色: 青(低速) → 紫 → 赤(高速)
+</footer>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const N = 300;
+const RC = 2.5, RC2 = RC * RC;
+const RHO = 0.4, DT = 0.005;
+
+let W, H, Lx, Ly;
+let px, py, vx, vy, fx, fy;
+let T_target = 1.5;
+let running = true;
+let stepCount = 0, lastKE = 0, lastPE = 0;
+
+function resize() {
+  const maxW = Math.min(window.innerWidth - 32, 700);
+  W = maxW;
+  H = Math.round(W * 0.56);
+  canvas.width = W;
+  canvas.height = H;
+}
+
+function initSim() {
+  resize();
+  const area = N / RHO;
+  Lx = Math.sqrt(area * (W / H));
+  Ly = area / Lx;
+
+  px = new Float64Array(N); py = new Float64Array(N);
+  vx = new Float64Array(N); vy = new Float64Array(N);
+  fx = new Float64Array(N); fy = new Float64Array(N);
+
+  const nx = Math.ceil(Math.sqrt(N * Lx / Ly));
+  const ny = Math.ceil(N / nx);
+  const dx = Lx / nx, dy = Ly / ny;
+  for (let i = 0; i < N; i++) {
+    px[i] = (i % nx + 0.5) * dx;
+    py[i] = (Math.floor(i / nx) % ny + 0.5) * dy;
+  }
+  initVel();
+  computeForces();
+  stepCount = 0;
+}
+
+function initVel() {
+  let svx = 0, svy = 0;
+  for (let i = 0; i < N; i++) {
+    vx[i] = (Math.random() - 0.5) * 2;
+    vy[i] = (Math.random() - 0.5) * 2;
+    svx += vx[i]; svy += vy[i];
+  }
+  svx /= N; svy /= N;
+  let ke = 0;
+  for (let i = 0; i < N; i++) {
+    vx[i] -= svx; vy[i] -= svy;
+    ke += vx[i]*vx[i] + vy[i]*vy[i];
+  }
+  const scale = Math.sqrt(T_target * N * 2 / ke);
+  for (let i = 0; i < N; i++) { vx[i] *= scale; vy[i] *= scale; }
+}
+
+function computeForces() {
+  fx.fill(0); fy.fill(0);
+  let pe = 0;
+  for (let i = 0; i < N - 1; i++) {
+    for (let j = i + 1; j < N; j++) {
+      let dx = px[i] - px[j], dy = py[i] - py[j];
+      dx -= Lx * Math.round(dx / Lx);
+      dy -= Ly * Math.round(dy / Ly);
+      const r2 = dx*dx + dy*dy;
+      if (r2 < RC2 && r2 > 0.04) {
+        const r2i = 1 / r2, r6i = r2i * r2i * r2i;
+        const f = 48 * r2i * r6i * (r6i - 0.5);
+        fx[i] += f * dx; fy[i] += f * dy;
+        fx[j] -= f * dx; fy[j] -= f * dy;
+        pe += 4 * r6i * (r6i - 1);
+      }
+    }
+  }
+  lastPE = pe;
+}
+
+function step() {
+  const hdt = DT * 0.5;
+  for (let i = 0; i < N; i++) {
+    vx[i] += fx[i] * hdt; vy[i] += fy[i] * hdt;
+    px[i] += vx[i] * DT;  py[i] += vy[i] * DT;
+    px[i] = ((px[i] % Lx) + Lx) % Lx;
+    py[i] = ((py[i] % Ly) + Ly) % Ly;
+  }
+  computeForces();
+  let ke = 0;
+  for (let i = 0; i < N; i++) {
+    vx[i] += fx[i] * hdt; vy[i] += fy[i] * hdt;
+    ke += vx[i]*vx[i] + vy[i]*vy[i];
+  }
+  lastKE = ke * 0.5;
+  stepCount++;
+  if (stepCount % 20 === 0) thermostat();
+}
+
+function thermostat() {
+  let ke = 0;
+  for (let i = 0; i < N; i++) ke += vx[i]*vx[i] + vy[i]*vy[i];
+  if (ke < 1e-10) return;
+  const scale = Math.sqrt(T_target / (ke / (2 * N)));
+  for (let i = 0; i < N; i++) { vx[i] *= scale; vy[i] *= scale; }
+}
+
+function getPhase(T) {
+  if (T < 2.0) return '気体（低温）';
+  if (T < 3.5) return '気体';
+  return '高温気体';
+}
+
+function speedColor(spd) {
+  const s = Math.min(spd / (Math.sqrt(T_target) * 4), 1);
+  const r = Math.round(60  + s * 195);
+  const g = Math.round(100 + s * 20 - s * s * 100);
+  const b = Math.round(240 - s * 180);
+  return `rgb(${r},${g},${b})`;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#08080f';
+  ctx.fillRect(0, 0, W, H);
+
+  const r = Math.max(1.8, Math.min(W, H) / (Math.sqrt(N) * 2.5));
+  const scaleX = W / Lx, scaleY = H / Ly;
+
+  for (let i = 0; i < N; i++) {
+    const sx = px[i] * scaleX;
+    const sy = py[i] * scaleY;
+    const spd = Math.sqrt(vx[i]*vx[i] + vy[i]*vy[i]);
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = speedColor(spd);
+    ctx.fill();
+  }
+
+  const T_eff = lastKE / N;
+
+  document.getElementById('s-ke').textContent = lastKE.toFixed(1);
+  document.getElementById('s-teff').textContent = T_eff.toFixed(3);
+  document.getElementById('ost-step').textContent = `step: ${stepCount.toLocaleString()}`;
+  document.getElementById('ost-teff').textContent = `T_eff: ${T_eff.toFixed(3)}`;
+  document.getElementById('phase-label').textContent = getPhase(T_eff);
+
+  const barPct = ((T_target - 1.5) / (5.0 - 1.5)) * 100;
+  document.getElementById('temp-bar').style.width = barPct.toFixed(1) + '%';
+}
+
+let raf;
+function loop() {
+  if (running) { step(); step(); step(); }
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+document.getElementById('sl-t').addEventListener('input', e => {
+  T_target = parseFloat(e.target.value);
+  document.getElementById('v-t').textContent = T_target.toFixed(2);
+});
+document.getElementById('btn-play').addEventListener('click', function() {
+  running = !running;
+  this.textContent = running ? '⏸ 一時停止' : '▶ 再生';
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  cancelAnimationFrame(raf);
+  initSim();
+  loop();
+});
+
+window.addEventListener('resize', () => {
+  resize();
+  const area = N / RHO;
+  Lx = Math.sqrt(area * (W / H));
+  Ly = area / Lx;
+});
+
+initSim();
+loop();
+</script>
+</body>
+</html>
