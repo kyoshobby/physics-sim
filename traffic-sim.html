@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>渋滞シミュレーター — Nagel-Schreckenberg</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+JP:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0f;
+    --surface: #141417;
+    --surface2: #1c1c21;
+    --border: rgba(255,255,255,0.07);
+    --accent: #e8c84a;
+    --accent2: #4ae8b4;
+    --red: #e84a4a;
+    --text: #e8e6de;
+    --muted: #6b6a64;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-body: 'Noto Sans JP', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 60px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 820px;
+    margin-bottom: 36px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  h1 {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+  }
+
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  main {
+    width: 100%;
+    max-width: 820px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .stat-value span {
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 2px;
+  }
+
+  /* Road canvas */
+  #road-wrap {
+    position: relative;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    border-radius: 4px;
+  }
+
+  /* Slider control */
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .control-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    min-width: 80px;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 2px;
+    background: var(--surface2);
+    outline: none;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--accent) var(--pct, 20%), var(--surface2) var(--pct, 20%));
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: -6px;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(232, 200, 74, 0.4);
+    transition: box-shadow 0.15s;
+  }
+
+  input[type=range]:hover::-webkit-slider-thumb {
+    box-shadow: 0 0 14px rgba(232, 200, 74, 0.7);
+  }
+
+  .control-value {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent);
+    min-width: 44px;
+    text-align: right;
+  }
+
+  /* Density scale under slider */
+  .density-scale {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 0 0 100px;
+    margin-top: 6px;
+  }
+
+  .density-scale span {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--muted);
+  }
+
+  .phase-label {
+    margin-top: 8px;
+    padding: 0 0 0 100px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+
+  /* Fixed params */
+  .fixed-params {
+    display: flex;
+    gap: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .fixed-param {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .fixed-param strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* Space-time canvas */
+  .xt-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  button:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+  button.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  button.primary:hover {
+    background: rgba(232,200,74,0.08);
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>渋滞シミュレーター</h1>
+    <div class="subtitle" style="margin-top:5px;">Nagel-Schreckenberg Model — 1D Cellular Automaton</div>
+  </div>
+  <div class="badge">p = 0.20 &nbsp;/&nbsp; v<sub>max</sub> = 4</div>
+</header>
+
+<main>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">台数</div>
+      <div class="stat-value" id="s-cars">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">平均速度</div>
+      <div class="stat-value" id="s-speed">—<span>cell/t</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">流量</div>
+      <div class="stat-value" id="s-flow">—<span>/t</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">停車率</div>
+      <div class="stat-value" id="s-stop">—<span>%</span></div>
+    </div>
+  </div>
+
+  <!-- Road -->
+  <div class="card" id="road-wrap">
+    <canvas id="road-canvas" height="64"></canvas>
+    <div class="legend" style="margin-top:8px;">
+      <div class="legend-item"><div class="legend-dot" style="background:#e84a4a;"></div>停車 (v=0)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e8a24a;"></div>低速 (v=1)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e8c84a;"></div>中速 (v=2-3)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4ae8b4;"></div>高速 (v=4)</div>
+    </div>
+  </div>
+
+  <!-- Control -->
+  <div class="card">
+    <div class="control-row">
+      <div class="control-label">密度 ρ</div>
+      <input type="range" id="rho" min="1" max="70" value="20" step="1" oninput="onDensity(this.value)">
+      <div class="control-value" id="rho-v">20%</div>
+    </div>
+    <div class="density-scale">
+      <span>1%</span><span>低密度</span><span>|</span><span>高密度</span><span>70%</span>
+    </div>
+    <div class="phase-label" id="phase-label" style="color: var(--accent2);">▸ 自由流</div>
+
+    <div class="fixed-params">
+      <div class="fixed-param">ランダムブレーキ p = <strong>0.20</strong></div>
+      <div class="fixed-param">最高速度 v<sub>max</sub> = <strong>4</strong></div>
+      <div class="fixed-param">道路長 L = <strong>150 セル</strong></div>
+    </div>
+  </div>
+
+  <!-- Space-time diagram -->
+  <div class="card">
+    <div class="xt-label">時空間図 — Space-Time Diagram</div>
+    <canvas id="xt-canvas" height="200"></canvas>
+  </div>
+
+  <!-- Buttons -->
+  <div class="btn-row">
+    <button class="primary" id="btn-pause" onclick="togglePause()">一時停止</button>
+    <button onclick="resetSim()">リセット</button>
+  </div>
+
+</main>
+
+<script>
+const L = 150;
+const VMAX = 4;
+const PROB = 0.20;
+const XT_ROWS = 100;
+
+let density = 0.20;
+let cells, speeds;
+let xtData = [];
+let paused = false;
+let timer;
+
+function init() {
+  cells = new Array(L).fill(0);
+  speeds = new Array(L).fill(0);
+  const n = Math.round(L * density);
+  const positions = new Set();
+  while (positions.size < n) positions.add(Math.floor(Math.random() * L));
+  positions.forEach(p => {
+    cells[p] = 1;
+    speeds[p] = Math.floor(Math.random() * (VMAX + 1));
+  });
+  xtData = [];
+}
+
+function step() {
+  const nc = new Array(L).fill(0);
+  const ns = new Array(L).fill(0);
+  for (let i = 0; i < L; i++) {
+    if (!cells[i]) continue;
+    let v = speeds[i];
+    v = Math.min(v + 1, VMAX);
+    let gap = VMAX + 1;
+    for (let d = 1; d <= VMAX + 1; d++) {
+      if (cells[(i + d) % L]) { gap = d - 1; break; }
+    }
+    v = Math.min(v, gap);
+    if (v > 0 && Math.random() < PROB) v = Math.max(v - 1, 0);
+    nc[(i + v) % L] = 1;
+    ns[(i + v) % L] = v;
+  }
+  cells = nc; speeds = ns;
+  xtData.push([...cells]);
+  if (xtData.length > XT_ROWS) xtData.shift();
+}
+
+function carColor(v) {
+  if (v === 0) return '#e84a4a';
+  if (v === 1) return '#e8744a';
+  if (v === 2) return '#e8a24a';
+  if (v === 3) return '#e8c84a';
+  return '#4ae8b4';
+}
+
+function draw() {
+  const rc = document.getElementById('road-canvas');
+  const W = rc.parentElement.clientWidth - 40;
+  rc.width = W; rc.height = 64;
+  const ctx = rc.getContext('2d');
+  ctx.fillStyle = '#0d0d0f';
+  ctx.fillRect(0, 0, W, 64);
+
+  const cw = W / L;
+  for (let i = 0; i < L; i++) {
+    if (cells[i]) {
+      ctx.fillStyle = carColor(speeds[i]);
+      ctx.beginPath();
+      ctx.roundRect(i * cw + 0.5, 12, Math.max(cw - 1.5, 1), 40, 2);
+      ctx.fill();
+    }
+  }
+
+  const xtc = document.getElementById('xt-canvas');
+  xtc.width = W; xtc.height = 200;
+  const ctx2 = xtc.getContext('2d');
+  ctx2.fillStyle = '#0d0d0f';
+  ctx2.fillRect(0, 0, W, 200);
+  const rh = 200 / XT_ROWS;
+  for (let t = 0; t < xtData.length; t++) {
+    const y = t * rh;
+    for (let i = 0; i < L; i++) {
+      if (xtData[t][i]) {
+        ctx2.fillStyle = '#4ae8b4';
+        ctx2.fillRect(i * cw, y, Math.max(cw - 0.5, 1), rh);
+      }
+    }
+  }
+
+  // Update stats
+  const n = cells.filter(Boolean).length;
+  const totalSpeed = cells.reduce((s, c, i) => s + (c ? speeds[i] : 0), 0);
+  const avgV = n > 0 ? (totalSpeed / n).toFixed(2) : '0.00';
+  const flow = (totalSpeed / L).toFixed(3);
+  const stopRate = n > 0 ? Math.round(speeds.filter((v, i) => cells[i] && v === 0).length / n * 100) : 0;
+
+  document.getElementById('s-cars').textContent = n;
+  document.getElementById('s-speed').innerHTML = avgV + '<span>cell/t</span>';
+  document.getElementById('s-flow').innerHTML = flow + '<span>/t</span>';
+  document.getElementById('s-stop').innerHTML = stopRate + '<span>%</span>';
+
+  // Phase label
+  const phase = document.getElementById('phase-label');
+  const d = density;
+  if (d < 0.15) { phase.textContent = '▸ 自由流 — 渋滞なし'; phase.style.color = '#4ae8b4'; }
+  else if (d < 0.35) { phase.textContent = '▸ 相転移域 — 渋滞波が発生'; phase.style.color = '#e8c84a'; }
+  else { phase.textContent = '▸ 渋滞流 — 全体的に停滞'; phase.style.color = '#e84a4a'; }
+
+  // Update slider fill
+  const slider = document.getElementById('rho');
+  const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+}
+
+function loop() {
+  if (paused) return;
+  step(); draw();
+  timer = setTimeout(loop, 100);
+}
+
+function onDensity(v) {
+  density = v / 100;
+  document.getElementById('rho-v').textContent = v + '%';
+  const slider = document.getElementById('rho');
+  const pct = ((v - slider.min) / (slider.max - slider.min)) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+  init(); draw();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('btn-pause');
+  btn.textContent = paused ? '再開' : '一時停止';
+  if (!paused) loop();
+}
+
+function resetSim() {
+  clearTimeout(timer);
+  init(); draw();
+  if (!paused) loop();
+}
+
+// Init slider fill
+window.addEventListener('load', () => {
+  const slider = document.getElementById('rho');
+  const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+  init();
+  loop();
+});
+</script>
+</body>
+</html>
