@@ -305,7 +305,7 @@
     <h1>渋滞シミュレーター</h1>
     <div class="subtitle" style="margin-top:5px;">Nagel-Schreckenberg Model — 1D Cellular Automaton</div>
   </div>
-  <div class="badge">p = 0.20 &nbsp;/&nbsp; v<sub>max</sub> = 4</div>
+  <div class="badge">p = 0.20 &nbsp;/&nbsp; v<sub>max</sub> = 4 &nbsp;/&nbsp; d<sub>safe</sub> 可変</div>
 </header>
 
 <main>
@@ -353,6 +353,17 @@
     </div>
     <div class="phase-label" id="phase-label" style="color: var(--accent2);">▸ 自由流</div>
 
+    <div style="height:14px;"></div>
+    <div class="control-row">
+      <div class="control-label">車間距離 d<sub>safe</sub></div>
+      <input type="range" id="dsafe" min="0" max="4" value="0" step="1" oninput="onDsafe(this.value)">
+      <div class="control-value" id="dsafe-v">0</div>
+    </div>
+    <div class="density-scale">
+      <span>0 (なし)</span><span style="margin-left:auto;">最低でも d マス空ける</span><span>4</span>
+    </div>
+    <div class="phase-label" id="dsafe-note" style="color:var(--muted);">▸ 安全距離なし（通常NSモデル）</div>
+
     <div class="fixed-params">
       <div class="fixed-param">ランダムブレーキ p = <strong>0.20</strong></div>
       <div class="fixed-param">最高速度 v<sub>max</sub> = <strong>4</strong></div>
@@ -381,6 +392,7 @@ const PROB = 0.20;
 const XT_ROWS = 100;
 
 let density = 0.20;
+let dsafe = 0;
 let cells, speeds;
 let xtData = [];
 let paused = false;
@@ -410,7 +422,7 @@ function step() {
     for (let d = 1; d <= VMAX + 1; d++) {
       if (cells[(i + d) % L]) { gap = d - 1; break; }
     }
-    v = Math.min(v, gap);
+    v = Math.min(v, gap - dsafe);
     if (v > 0 && Math.random() < PROB) v = Math.max(v - 1, 0);
     nc[(i + v) % L] = 1;
     ns[(i + v) % L] = v;
@@ -493,6 +505,19 @@ function loop() {
   timer = setTimeout(loop, 100);
 }
 
+function onDsafe(v) {
+  dsafe = parseInt(v);
+  document.getElementById('dsafe-v').textContent = v;
+  const slider = document.getElementById('dsafe');
+  const pct = ((v - slider.min) / (slider.max - slider.min)) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+  const note = document.getElementById('dsafe-note');
+  if (dsafe === 0) { note.textContent = '▸ 安全距離なし（通常NSモデル）'; note.style.color = 'var(--muted)'; }
+  else if (dsafe === 1) { note.textContent = '▸ 最低1マス空ける — 追突回避'; note.style.color = '#4ae8b4'; }
+  else if (dsafe === 2) { note.textContent = '▸ 最低2マス空ける — 慎重な運転'; note.style.color = '#e8c84a'; }
+  else { note.textContent = '▸ 最低' + dsafe + 'マス空ける — 流量が大きく低下'; note.style.color = '#e84a4a'; }
+}
+
 function onDensity(v) {
   density = v / 100;
   document.getElementById('rho-v').textContent = v + '%';
@@ -520,6 +545,8 @@ window.addEventListener('load', () => {
   const slider = document.getElementById('rho');
   const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
   slider.style.setProperty('--pct', pct + '%');
+  const ds = document.getElementById('dsafe');
+  ds.style.setProperty('--pct', '0%');
   init();
   loop();
 });
