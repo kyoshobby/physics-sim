@@ -1,58 +1,77 @@
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-.wrap { padding: 1rem 0; }
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brownian Motion Simulation</title>
+  <style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #2f2f2f; font-family: sans-serif; }
+  .wrap { padding: 1rem; max-width: 1200px; margin: 0 auto; }
 
-.canvas-wrap { position: relative; min-width: 0; }
-.canvas-wrap canvas { display: block; width: 100%; height: 100%; border-radius: var(--border-radius-lg); border: 0.5px solid rgba(255,255,255,0.07); background: #1e1c1a; }
+  .canvas-wrap { position: relative; min-width: 0; }
+  .canvas-wrap canvas { display: block; width: 100%; height: 100%; border-radius: 8px; border: 0.5px solid rgba(255,255,255,0.07); background: #1e1c1a; }
 
-/* 横並び（PC） */
-.row-horizontal { display: flex; flex-direction: row; gap: 12px; align-items: stretch; height: 300px; }
-.row-horizontal #sim-wrap  { flex: 0 0 48%; }
-.row-horizontal #hist-wrap { flex: 1 1 0; }
+  /* 横並び（PC） */
+  .row-horizontal { display: flex; flex-direction: row; gap: 12px; align-items: stretch; height: 350px; }
+  .row-horizontal #sim-wrap  { flex: 0 0 48%; }
+  .row-horizontal #hist-wrap { flex: 1 1 0; }
 
-/* 縦並び（スマホ） */
-.row-vertical { display: flex; flex-direction: column; gap: 8px; }
-.row-vertical #sim-wrap,
-.row-vertical #hist-wrap { width: 100%; aspect-ratio: 4/3; }
-.row-vertical .canvas-wrap canvas { position: absolute; top: 0; left: 0; height: 100%; }
-.row-vertical .canvas-wrap { position: relative; }
+  /* 縦並び（スマホ） */
+  .row-vertical { display: flex; flex-direction: column; gap: 12px; }
+  .row-vertical #sim-wrap,
+  .row-vertical #hist-wrap { 
+    width: 100%; 
+    position: relative;
+    /* 高さを確保してアスペクト比 4:3 を維持 */
+    height: auto;
+    aspect-ratio: 4/3; 
+  }
+  .row-vertical .canvas-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
-.ctrl-bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 12px; font-size: 13px; color: #8a8783; }
-.ctrl-bar label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.ctrl-bar input[type=range] { width: clamp(60px, 10vw, 100px); }
-.ctrl-bar span { min-width: 24px; font-weight: 500; color: #d4d0cc; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
-.stats-2col { grid-template-columns: repeat(2, 1fr) !important; }
-.stat { background: #2a2825; border-radius: var(--border-radius-md); padding: 8px 10px; }
-.stat-label { font-size: 11px; color: #8a8783; margin-bottom: 2px; }
-.stat-value { font-size: 16px; font-weight: 500; color: #d4d0cc; }
-.legend { display: flex; gap: 16px; font-size: 12px; color: #8a8783; margin-top: 8px; flex-wrap: wrap; align-items: center; }
-.leg-line { width: 18px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
-.progress-bar { height: 3px; background: #2a2825; border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
-.progress-fill { height: 100%; background: #7F77DD; border-radius: 2px; }
-</style>
-<body style="
-    background: #2f2f2f;
-">
+  .ctrl-bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 12px; font-size: 13px; color: #8a8783; }
+  .ctrl-bar label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .ctrl-bar input[type=range] { width: 80px; }
+  .ctrl-bar span { min-width: 24px; font-weight: 500; color: #d4d0cc; }
+  .ctrl-bar button { font-size:12px; padding:5px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  .ctrl-bar button:hover { background: #555; }
+  
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .stats-2col { grid-template-columns: repeat(2, 1fr) !important; }
+  .stat { background: #2a2825; border-radius: 6px; padding: 8px 10px; }
+  .stat-label { font-size: 11px; color: #8a8783; margin-bottom: 2px; }
+  .stat-value { font-size: 16px; font-weight: 500; color: #d4d0cc; }
+  
+  .legend { display: flex; gap: 16px; font-size: 12px; color: #8a8783; margin-top: 8px; flex-wrap: wrap; align-items: center; line-height: 1.5; }
+  .leg-line { width: 18px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+  .progress-bar { height: 3px; background: #2a2825; border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #7F77DD; border-radius: 2px; transition: width 0.1s linear; }
+  </style>
+</head>
+<body>
 <div class="wrap">
   <div class="ctrl-bar">
-    <label>粒子数 <input type="range" min="1" max="500" value="150" step="1" id="nP" style="width:80px"> <span id="nPOut">150</span></label>
-    <label>温度 <input type="range" min="1" max="8" value="8" step="1" id="tmp" style="width:80px"> <span id="tmpOut">8</span></label>
-    <label>粘性 <input type="range" min="1" max="10" value="5" step="1" id="vis" style="width:80px"> <span id="visOut">5</span></label>
-    <label>リセット間隔 <input type="range" min="3" max="60" value="45" step="1" id="resetInt" style="width:80px"> <span id="resetIntOut">45</span>秒</label>
-    <button id="resetBtn" style="font-size:12px; padding:5px 12px;">今すぐリセット ↺</button>
+    <label>粒子数 <input type="range" min="1" max="500" value="150" step="1" id="nP"> <span id="nPOut">150</span></label>
+    <label>温度 <input type="range" min="1" max="8" value="8" step="1" id="tmp"> <span id="tmpOut">8</span></label>
+    <label>粘性 <input type="range" min="1" max="10" value="5" step="1" id="vis"> <span id="visOut">5</span></label>
+    <label>リセット間隔 <input type="range" min="3" max="60" value="45" step="1" id="resetInt"> <span id="resetIntOut">45</span>秒</label>
+    <button id="resetBtn">今すぐリセット ↺</button>
   </div>
+  
   <div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+  
   <div class="row row-horizontal" id="row">
     <div class="canvas-wrap" id="sim-wrap"><canvas id="sim"></canvas></div>
     <div class="canvas-wrap" id="hist-wrap"><canvas id="hist"></canvas></div>
   </div>
+  
   <div class="legend">
     <span><span style="width:10px;height:10px;border-radius:50%;background:#7F77DD;display:inline-block;margin-right:4px;vertical-align:middle;"></span>粒子</span>
     <span><span style="width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:inline-block;margin-right:4px;vertical-align:middle;"></span>軌跡</span>
     <span><span class="leg-line" style="background:#D85A30;height:10px;width:10px;border-radius:0;"></span>現在の変位分布（スナップショット）</span>
     <span><span class="leg-line" style="background:#378ADD;"></span>理論 N(0, √(2Dt))</span>
   </div>
+  
   <div class="stats">
     <div class="stat"><div class="stat-label">粒子数 N</div><div class="stat-value" id="sN">0</div></div>
     <div class="stat"><div class="stat-label">実測 σ</div><div class="stat-value" id="sSigma">0.0</div></div>
@@ -60,23 +79,31 @@
     <div class="stat"><div class="stat-label">次のリセット</div><div class="stat-value" id="sTimer">10.0s</div></div>
   </div>
 </div>
-</body>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
-// wrap幅を監視してレイアウト切り替え（メディアクエリはiframe内で効かない場合があるため）
 const rowEl   = document.getElementById('row');
 const statsEl = document.querySelector('.stats');
+
 function applyLayout() {
   const isMobile = window.innerWidth < 600;
   rowEl.className = 'row ' + (isMobile ? 'row-vertical' : 'row-horizontal');
   statsEl.classList.toggle('stats-2col', isMobile);
+  
+  // レイアウト変更時にChart.jsサイズを強制更新
+  if (histChart) {
+    setTimeout(() => {
+      histChart.resize();
+    }, 0);
+  }
 }
-applyLayout();
+
+// 初期化とリサイズイベント
 window.addEventListener('resize', applyLayout);
 
 const simCanvas = document.getElementById('sim');
 const sctx = simCanvas.getContext('2d');
-// canvas の描画解像度をラッパーサイズに合わせる
+
 function resizeSimCanvas() {
   const wrap = document.getElementById('sim-wrap');
   const w = wrap.clientWidth, h = wrap.clientHeight;
@@ -85,15 +112,13 @@ function resizeSimCanvas() {
     simCanvas.height = h;
   }
 }
+
 let SW, SH, CX, CY;
 function updateSimDims() {
   resizeSimCanvas();
   SW = simCanvas.width; SH = simCanvas.height;
   CX = SW / 2; CY = SH / 2;
 }
-updateSimDims();
-new ResizeObserver(() => { updateSimDims(); initParticles(); })
-  .observe(document.getElementById('sim-wrap'));
 
 const NBINS = 100;
 const dt = 1.0;
@@ -111,10 +136,8 @@ function getIntervalMs()  { return getIntervalSec() * 1000; }
 function langevinParams() {
   const gamma    = getV() * 0.015;
   const eta      = getT() * 0.3;
-  const noiseVar = (eta * eta) / 12; // uniform [-eta/2, eta/2] の分散
+  const noiseVar = (eta * eta) / 12;
   const c1       = Math.exp(-gamma * dt);
-  // Green-Kubo公式: D = noiseVar * (1+c1) / (2*(1-c1))
-  // BAOABの離散積分における正確な拡散係数
   const D = noiseVar * (1 + c1) / (2 * (1 - c1));
   return { gamma, eta, noiseVar, c1, D };
 }
@@ -130,9 +153,8 @@ function computeAxisRange() {
 }
 
 function computeYMax() {
-  // 初期（step=1）が最も尖る → そのピークを縦軸上限に
   const sigma = theoreticalSigma(1);
-  return (1 / (sigma * Math.sqrt(2 * Math.PI))) * 1.3 * 0.10;// y軸高さ
+  return (1 / (sigma * Math.sqrt(2 * Math.PI))) * 1.3 * 0.10;
 }
 
 function initParticles() {
@@ -157,7 +179,6 @@ function initParticles() {
     histChart.update('none');
   }
 
-  const { D } = langevinParams();
   document.getElementById('sN').textContent     = getN();
   document.getElementById('sSigma').textContent  = '0.0';
   document.getElementById('sSigmaT').textContent = '0.0';
@@ -167,7 +188,6 @@ function gaussian(x, sigma) {
   return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * (x / sigma) ** 2);
 }
 
-// 現在ステップの全粒子変位スナップショットからヒストグラム構築
 function buildHistogram() {
   const bins = Array(NBINS).fill(0);
   const binW = (axisRange * 2) / NBINS;
@@ -188,12 +208,6 @@ function buildTheoryGauss(sigmaT) {
   });
 }
 
-// BAOAB法:
-// B: v += (F/m) * dt/2          (外力なしなのでスキップ → 速度はそのまま)
-// A: x += v * dt/2              (位置を半ステップ)
-// O: v = v*c1 + c2*xi           (Ornstein-Uhlenbeck: 摩擦+ノイズを解析積分)
-// A: x += v * dt/2              (位置を半ステップ)
-// B: v += (F/m) * dt/2          (外力なし → スキップ)
 function baoabStep(p, gamma, eta, c1) {
   const noiseStd = eta / Math.sqrt(12);
   const c2 = Math.sqrt(1 - c1 * c1) * noiseStd;
@@ -208,7 +222,6 @@ function baoabStep(p, gamma, eta, c1) {
   p.y += p.vy * (dt / 2);
 }
 
-// Box-Muller法で標準正規乱数
 function randn() {
   let u, v;
   do { u = Math.random(); } while (u === 0);
@@ -230,7 +243,6 @@ function updateChart() {
   const sigmaT = theoreticalSigma(step);
   document.getElementById('sSigmaT').textContent = sigmaT.toFixed(1);
 
-  // 実測σ（現在スナップショット）
   const dxs  = particles.map(p => p.x - p.ox);
   const mean = dxs.reduce((a, b) => a + b, 0) / dxs.length;
   const sigmaEmp = Math.sqrt(dxs.reduce((a, b) => a + (b - mean) ** 2, 0) / dxs.length);
@@ -246,14 +258,6 @@ function drawSim(now) {
   const elapsed  = now - lastResetTime;
   const interval = getIntervalMs();
   const ratio    = Math.min(elapsed / interval, 1);
-/*
-  sctx.strokeStyle = 'rgba(127,119,221,0.12)';
-  sctx.lineWidth = 1;
-  sctx.setLineDash([4, 6]);
-  sctx.beginPath();
-  sctx.arc(CX, CY, 20 + ratio * 100, 0, Math.PI * 2);
-  sctx.stroke();
-  sctx.setLineDash([]);*/
 
   for (const p of particles) {
     if (p.trail.length > 1) {
@@ -264,7 +268,6 @@ function drawSim(now) {
       sctx.lineWidth = 1.2;
       sctx.stroke();
     }
-    // 発光感：大きめの半透明円 + 中心の明るい円
     sctx.beginPath();
     sctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
     sctx.fillStyle = '#A09AEE22';
@@ -281,7 +284,6 @@ function drawSim(now) {
 }
 
 function initChart() {
-  const isDark    = true;
   const gridColor = 'rgba(255,255,255,0.07)';
   const textColor = '#9A9890';
   const binW      = (axisRange * 2) / NBINS;
@@ -338,7 +340,15 @@ document.getElementById('vis').oninput      = e => { document.getElementById('vi
 document.getElementById('resetInt').oninput = e => { document.getElementById('resetIntOut').textContent = e.target.value; reInit(); };
 document.getElementById('resetBtn').onclick = reInit;
 
+// ResizeObserver のコールバックで描画領域と粒子の再配置
+new ResizeObserver(() => { 
+  updateSimDims(); 
+  initParticles(); 
+}).observe(document.getElementById('sim-wrap'));
+
+// 初回実行の順序を整理
 initChart();
-initParticles();
+applyLayout(); // Chartが存在する状態でレイアウト適用
 requestAnimationFrame(loop);
 </script>
+</html>
