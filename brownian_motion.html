@@ -67,13 +67,12 @@
 const rowEl   = document.getElementById('row');
 const statsEl = document.querySelector('.stats');
 function applyLayout() {
-  const w = document.querySelector('.wrap').clientWidth;
-  const isMobile = w < 560;
-  rowEl.className   = 'row ' + (isMobile ? 'row-vertical' : 'row-horizontal');
+  const isMobile = window.innerWidth < 600;
+  rowEl.className = 'row ' + (isMobile ? 'row-vertical' : 'row-horizontal');
   statsEl.classList.toggle('stats-2col', isMobile);
 }
 applyLayout();
-new ResizeObserver(applyLayout).observe(document.querySelector('.wrap'));
+window.addEventListener('resize', applyLayout);
 
 const simCanvas = document.getElementById('sim');
 const sctx = simCanvas.getContext('2d');
