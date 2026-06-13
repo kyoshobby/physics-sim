@@ -9,14 +9,14 @@
 #sim-wrap  { flex: 0 0 48%; }
 #hist-wrap { flex: 1 1 0; }
 
-/* スマホ: 縦並び、高さはaspect-ratioで自動 */
-@media (max-width: 600px) {
-  .row { flex-direction: column; height: auto; gap: 8px; }
-  #sim-wrap  { flex: none; width: 100%; aspect-ratio: 4/3; }
-  #hist-wrap { flex: none; width: 100%; aspect-ratio: 4/3; }
-  .canvas-wrap canvas { height: 100%; }
-  .stats { grid-template-columns: repeat(2, 1fr); }
-}
+/* レイアウト切り替えはJSで制御 */
+.row-horizontal { display: flex; flex-direction: row; gap: 12px; align-items: stretch; height: 300px; }
+.row-vertical   { display: flex; flex-direction: column; gap: 8px; height: auto; }
+.row-horizontal #sim-wrap  { flex: 0 0 48%; }
+.row-horizontal #hist-wrap { flex: 1 1 0; }
+.row-vertical #sim-wrap,
+.row-vertical #hist-wrap   { flex: none; width: 100%; aspect-ratio: 4/3; }
+.stats-2col { grid-template-columns: repeat(2, 1fr) !important; }
 
 .ctrl-bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 12px; font-size: 13px; color: #8a8783; }
 .ctrl-bar label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -43,7 +43,7 @@
     <button id="resetBtn" style="font-size:12px; padding:5px 12px;">今すぐリセット ↺</button>
   </div>
   <div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
-  <div class="row">
+  <div class="row row-horizontal" id="row">
     <div class="canvas-wrap" id="sim-wrap"><canvas id="sim"></canvas></div>
     <div class="canvas-wrap" id="hist-wrap"><canvas id="hist"></canvas></div>
   </div>
@@ -63,6 +63,18 @@
 </body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
+// wrap幅を監視してレイアウト切り替え（メディアクエリはiframe内で効かない場合があるため）
+const rowEl   = document.getElementById('row');
+const statsEl = document.querySelector('.stats');
+function applyLayout() {
+  const w = document.querySelector('.wrap').clientWidth;
+  const isMobile = w < 560;
+  rowEl.className   = 'row ' + (isMobile ? 'row-vertical' : 'row-horizontal');
+  statsEl.classList.toggle('stats-2col', isMobile);
+}
+applyLayout();
+new ResizeObserver(applyLayout).observe(document.querySelector('.wrap'));
+
 const simCanvas = document.getElementById('sim');
 const sctx = simCanvas.getContext('2d');
 // canvas の描画解像度をラッパーサイズに合わせる
