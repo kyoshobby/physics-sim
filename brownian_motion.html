@@ -95,10 +95,11 @@ function langevinParams() {
   const gamma    = getV() * 0.015;
   const eta      = getT() * 0.3;
   const noiseVar = (eta * eta) / 12; // uniform [-eta/2, eta/2] の分散
-  // BAOAB の拡散係数: D = noiseVar * dt / (2 * gamma * m²) (m=1)
-  // 位置更新が A ステップ (dt/2 ずつ2回) → 実効的に D = noiseVar / (2 * gamma)
-  const D = noiseVar / (2 * gamma);
-  return { gamma, eta, noiseVar, D };
+  const c1       = Math.exp(-gamma * dt);
+  // Green-Kubo公式: D = noiseVar * (1+c1) / (2*(1-c1))
+  // BAOABの離散積分における正確な拡散係数
+  const D = noiseVar * (1 + c1) / (2 * (1 - c1));
+  return { gamma, eta, noiseVar, c1, D };
 }
 
 function theoreticalSigma(steps) {
@@ -176,26 +177,18 @@ function buildTheoryGauss(sigmaT) {
 // O: v = v*c1 + c2*xi           (Ornstein-Uhlenbeck: 摩擦+ノイズを解析積分)
 // A: x += v * dt/2              (位置を半ステップ)
 // B: v += (F/m) * dt/2          (外力なし → スキップ)
-function baoabStep(p, gamma, eta) {
-  const c1 = Math.exp(-gamma * dt);                   // O ステップの減衰係数
-  const noiseStd = eta / Math.sqrt(12);               // uniform のσ
-  const c2 = Math.sqrt(1 - c1 * c1) * noiseStd;      // O ステップのノイズ振幅
+function baoabStep(p, gamma, eta, c1) {
+  const noiseStd = eta / Math.sqrt(12);
+  const c2 = Math.sqrt(1 - c1 * c1) * noiseStd;
 
-  // B (外力=0 なのでスキップ)
-
-  // A: 位置を半ステップ
   p.x += p.vx * (dt / 2);
   p.y += p.vy * (dt / 2);
 
-  // O: 速度を解析的に更新 (摩擦 + ガウスノイズ)
   p.vx = p.vx * c1 + c2 * randn();
   p.vy = p.vy * c1 + c2 * randn();
 
-  // A: 位置を半ステップ
   p.x += p.vx * (dt / 2);
   p.y += p.vy * (dt / 2);
-
-  // B (外力=0 なのでスキップ)
 }
 
 // Box-Muller法で標準正規乱数
@@ -207,9 +200,9 @@ function randn() {
 }
 
 function simStep() {
-  const { gamma, eta } = langevinParams();
+  const { gamma, eta, c1 } = langevinParams();
   for (const p of particles) {
-    baoabStep(p, gamma, eta);
+    baoabStep(p, gamma, eta, c1);
     p.trail.push({ x: p.x, y: p.y });
     if (p.trail.length > 60) p.trail.shift();
   }
