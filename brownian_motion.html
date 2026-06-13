@@ -2,27 +2,27 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 .wrap { padding: 1rem 0; }
 
-/* PC: 横並び、行の高さを固定 */
-.row { display: flex; gap: 12px; align-items: stretch; height: 300px; }
 .canvas-wrap { position: relative; min-width: 0; }
 .canvas-wrap canvas { display: block; width: 100%; height: 100%; border-radius: var(--border-radius-lg); border: 0.5px solid rgba(255,255,255,0.07); background: #1e1c1a; }
-#sim-wrap  { flex: 0 0 48%; }
-#hist-wrap { flex: 1 1 0; }
 
-/* レイアウト切り替えはJSで制御 */
+/* 横並び（PC） */
 .row-horizontal { display: flex; flex-direction: row; gap: 12px; align-items: stretch; height: 300px; }
-.row-vertical   { display: flex; flex-direction: column; gap: 8px; height: auto; }
 .row-horizontal #sim-wrap  { flex: 0 0 48%; }
 .row-horizontal #hist-wrap { flex: 1 1 0; }
+
+/* 縦並び（スマホ） */
+.row-vertical { display: flex; flex-direction: column; gap: 8px; }
 .row-vertical #sim-wrap,
-.row-vertical #hist-wrap   { flex: none; width: 100%; aspect-ratio: 4/3; }
-.stats-2col { grid-template-columns: repeat(2, 1fr) !important; }
+.row-vertical #hist-wrap { width: 100%; aspect-ratio: 4/3; }
+.row-vertical .canvas-wrap canvas { position: absolute; top: 0; left: 0; height: 100%; }
+.row-vertical .canvas-wrap { position: relative; }
 
 .ctrl-bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 12px; font-size: 13px; color: #8a8783; }
 .ctrl-bar label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ctrl-bar input[type=range] { width: clamp(60px, 10vw, 100px); }
 .ctrl-bar span { min-width: 24px; font-weight: 500; color: #d4d0cc; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.stats-2col { grid-template-columns: repeat(2, 1fr) !important; }
 .stat { background: #2a2825; border-radius: var(--border-radius-md); padding: 8px 10px; }
 .stat-label { font-size: 11px; color: #8a8783; margin-bottom: 2px; }
 .stat-value { font-size: 16px; font-weight: 500; color: #d4d0cc; }
