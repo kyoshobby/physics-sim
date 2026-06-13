@@ -1,0 +1,319 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { padding: 1rem 0; }
+.row { display: flex; gap: 12px; align-items: stretch; }
+.canvas-wrap { position: relative; flex: 1 1 0; min-width: 0; }
+.canvas-wrap canvas { display: block; width: 100%; height: 100%; border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); }
+#sim-wrap { flex: 0 0 48%; }
+#hist-wrap { flex: 1 1 0; }
+.ctrl-bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 12px; font-size: 13px; color: var(--color-text-secondary); }
+.ctrl-bar label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ctrl-bar input[type=range] { width: clamp(60px, 10vw, 100px); }
+.ctrl-bar span { min-width: 24px; font-weight: 500; color: var(--color-text-primary); }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+@media (max-width: 500px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .row { flex-direction: column; }
+  #sim-wrap { flex: 0 0 auto; aspect-ratio: 4/3; }
+  #hist-wrap { flex: 0 0 auto; height: 220px; }
+}
+.stat { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 8px 10px; }
+.stat-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 2px; }
+.stat-value { font-size: 16px; font-weight: 500; color: var(--color-text-primary); }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--color-text-secondary); margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.leg-line { width: 18px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+.progress-bar { height: 3px; background: var(--color-border-tertiary); border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
+.progress-fill { height: 100%; background: #7F77DD; border-radius: 2px; }
+</style>
+
+<div class="wrap">
+  <div class="ctrl-bar">
+    <label>粒子数 <input type="range" min="1" max="500" value="155" step="1" id="nP" style="width:80px"> <span id="nPOut">60</span></label>
+    <label>温度 <input type="range" min="1" max="8" value="8" step="1" id="tmp" style="width:80px"> <span id="tmpOut">6</span></label>
+    <label>粘性 <input type="range" min="1" max="10" value="5" step="1" id="vis" style="width:80px"> <span id="visOut">5</span></label>
+    <label>リセット間隔 <input type="range" min="3" max="60" value="45" step="1" id="resetInt" style="width:80px"> <span id="resetIntOut">10</span>秒</label>
+    <button id="resetBtn" style="font-size:12px; padding:5px 12px;">今すぐリセット ↺</button>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+  <div class="row">
+    <div class="canvas-wrap" id="sim-wrap"><canvas id="sim"></canvas></div>
+    <div class="canvas-wrap" id="hist-wrap"><canvas id="hist"></canvas></div>
+  </div>
+  <div class="legend">
+    <span><span style="width:10px;height:10px;border-radius:50%;background:#7F77DD;display:inline-block;margin-right:4px;vertical-align:middle;"></span>粒子</span>
+    <span><span style="width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:inline-block;margin-right:4px;vertical-align:middle;"></span>軌跡</span>
+    <span><span class="leg-line" style="background:#D85A30;height:10px;width:10px;border-radius:0;"></span>現在の変位分布（スナップショット）</span>
+    <span><span class="leg-line" style="background:#378ADD;"></span>理論 N(0, √(2Dt))</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">粒子数 N</div><div class="stat-value" id="sN">0</div></div>
+    <div class="stat"><div class="stat-label">実測 σ</div><div class="stat-value" id="sSigma">0.0</div></div>
+    <div class="stat"><div class="stat-label">理論 σ=√(2Dt)</div><div class="stat-value" id="sSigmaT">0.0</div></div>
+    <div class="stat"><div class="stat-label">次のリセット</div><div class="stat-value" id="sTimer">10.0s</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const simCanvas = document.getElementById('sim');
+const sctx = simCanvas.getContext('2d');
+// canvas の描画解像度をラッパーサイズに合わせる
+function resizeSimCanvas() {
+  const wrap = document.getElementById('sim-wrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if (simCanvas.width !== w || simCanvas.height !== h) {
+    simCanvas.width  = w;
+    simCanvas.height = h;
+  }
+}
+let SW, SH, CX, CY;
+function updateSimDims() {
+  resizeSimCanvas();
+  SW = simCanvas.width; SH = simCanvas.height;
+  CX = SW / 2; CY = SH / 2;
+}
+updateSimDims();
+new ResizeObserver(() => { updateSimDims(); initParticles(); })
+  .observe(document.getElementById('sim-wrap'));
+
+const NBINS = 100;
+const dt = 1.0;
+let particles = [], step = 0, histChart;
+let lastResetTime = performance.now();
+let axisRange = 60;
+let yMax = 0.05;
+
+function getN()           { return +document.getElementById('nP').value; }
+function getT()           { return +document.getElementById('tmp').value; }
+function getV()           { return +document.getElementById('vis').value; }
+function getIntervalSec() { return +document.getElementById('resetInt').value; }
+function getIntervalMs()  { return getIntervalSec() * 1000; }
+
+function langevinParams() {
+  const gamma    = getV() * 0.015;
+  const eta      = getT() * 0.25;
+  const noiseVar = (eta * eta) / 12; // uniform [-eta/2, eta/2] の分散
+  const c1       = Math.exp(-gamma * dt);
+  // BAOAB の正確な拡散係数（Green-Kubo 速度自己相関積分）
+  // D = (dt/2)² × noiseVar × (1+c1)/(1-c1) × (1/1)
+  //   = dt² × noiseVar × (1+c1) / (2*(1-c1))
+  // ※ 連続時間近似 D≈noiseVar/(2γ) は dt が大きいと過小評価になるため不使用
+  const D = (dt * dt * noiseVar * (1 + c1)) / (2 * (1 - c1));
+  return { gamma, eta, noiseVar, c1, D };
+}
+
+function theoreticalSigma(steps) {
+  const { D } = langevinParams();
+  return Math.sqrt(2 * D * Math.max(steps, 1));
+}
+
+function computeAxisRange() {
+  const totalSteps = getIntervalSec() * 60;
+  return Math.max(theoreticalSigma(totalSteps) * 2, 20);
+}
+
+function computeYMax() {
+  // 初期（step=1）が最も尖る → そのピークを縦軸上限に
+  const sigma = theoreticalSigma(1);
+  return (1 / (sigma * Math.sqrt(2 * Math.PI))) * 1.3 * 0.25;// 縦軸max
+}
+
+function initParticles() {
+  step = 0;
+  lastResetTime = performance.now();
+  axisRange = computeAxisRange();
+  yMax      = computeYMax();
+
+  particles = Array.from({ length: getN() }, () => {
+    const x = CX + (Math.random() - 0.5) * 2;
+    const y = CY + (Math.random() - 0.5) * 2;
+    return { x, y, ox: x, oy: y, vx: 0, vy: 0, trail: [{x, y}] };
+  });
+
+  if (histChart) {
+    const binW = (axisRange * 2) / NBINS;
+    histChart.data.labels = Array.from({ length: NBINS }, (_, i) =>
+      Math.round(-axisRange + (i + 0.5) * binW));
+    histChart.data.datasets[0].data = Array(NBINS).fill(0);
+    histChart.data.datasets[1].data = Array(NBINS).fill(0);
+    histChart.options.scales.y.max = yMax;
+    histChart.update('none');
+  }
+
+  const { D } = langevinParams();
+  document.getElementById('sN').textContent     = getN();
+  document.getElementById('sSigma').textContent  = '0.0';
+  document.getElementById('sSigmaT').textContent = '0.0';
+}
+
+function gaussian(x, sigma) {
+  return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * (x / sigma) ** 2);
+}
+
+// 現在ステップの全粒子変位スナップショットからヒストグラム構築
+function buildHistogram() {
+  const bins = Array(NBINS).fill(0);
+  const binW = (axisRange * 2) / NBINS;
+  for (const p of particles) {
+    const dx  = p.x - p.ox;
+    const idx = Math.floor((dx + axisRange) / binW);
+    if (idx >= 0 && idx < NBINS) bins[idx]++;
+  }
+  const total = particles.length;
+  return bins.map(b => total > 0 ? b / (total * binW) : 0);
+}
+
+function buildTheoryGauss(sigmaT) {
+  const binW = (axisRange * 2) / NBINS;
+  return Array.from({ length: NBINS }, (_, i) => {
+    const x = -axisRange + (i + 0.5) * binW;
+    return sigmaT > 0 ? gaussian(x, sigmaT) : 0;
+  });
+}
+
+// BAOAB法:
+// B: v += (F/m) * dt/2          (外力なしなのでスキップ → 速度はそのまま)
+// A: x += v * dt/2              (位置を半ステップ)
+// O: v = v*c1 + c2*xi           (Ornstein-Uhlenbeck: 摩擦+ノイズを解析積分)
+// A: x += v * dt/2              (位置を半ステップ)
+// B: v += (F/m) * dt/2          (外力なし → スキップ)
+function baoabStep(p, gamma, eta, c1) {
+  // c1 は langevinParams() で計算済みの値を受け取る
+  const noiseStd = eta / Math.sqrt(12);               // uniform のσ
+  const c2 = Math.sqrt(1 - c1 * c1) * noiseStd;      // O ステップのノイズ振幅
+
+  // B (外力=0 なのでスキップ)
+
+  // A: 位置を半ステップ
+  p.x += p.vx * (dt / 2);
+  p.y += p.vy * (dt / 2);
+
+  // O: 速度を解析的に更新 (摩擦 + ガウスノイズ)
+  p.vx = p.vx * c1 + c2 * randn();
+  p.vy = p.vy * c1 + c2 * randn();
+
+  // A: 位置を半ステップ
+  p.x += p.vx * (dt / 2);
+  p.y += p.vy * (dt / 2);
+
+  // B (外力=0 なのでスキップ)
+}
+
+// Box-Muller法で標準正規乱数
+function randn() {
+  let u, v;
+  do { u = Math.random(); } while (u === 0);
+  v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function simStep() {
+  const { gamma, eta, c1 } = langevinParams();
+  for (const p of particles) {
+    baoabStep(p, gamma, eta, c1);
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 60) p.trail.shift();
+  }
+  step++;
+}
+
+function updateChart() {
+  const sigmaT = theoreticalSigma(step);
+  document.getElementById('sSigmaT').textContent = sigmaT.toFixed(1);
+
+  // 実測σ（現在スナップショット）
+  const dxs  = particles.map(p => p.x - p.ox);
+  const mean = dxs.reduce((a, b) => a + b, 0) / dxs.length;
+  const sigmaEmp = Math.sqrt(dxs.reduce((a, b) => a + (b - mean) ** 2, 0) / dxs.length);
+  document.getElementById('sSigma').textContent = sigmaEmp.toFixed(1);
+
+  histChart.data.datasets[0].data = buildHistogram();
+  histChart.data.datasets[1].data = buildTheoryGauss(sigmaT);
+  histChart.update('none');
+}
+
+function drawSim(now) {
+  sctx.clearRect(0, 0, SW, SH);
+  const elapsed  = now - lastResetTime;
+  const interval = getIntervalMs();
+  const ratio    = Math.min(elapsed / interval, 1);
+/*
+  sctx.strokeStyle = 'rgba(127,119,221,0.9)';// 円色
+  sctx.lineWidth = 1;
+  sctx.setLineDash([4, 6]);
+  sctx.beginPath();
+  sctx.arc(CX, CY, 20 + ratio * 100, 0, Math.PI * 2);
+  sctx.stroke();
+  sctx.setLineDash([]);
+*/
+  for (const p of particles) {
+    if (p.trail.length > 1) {
+      sctx.beginPath();
+      sctx.moveTo(p.trail[0].x, p.trail[0].y);
+      for (let i = 1; i < p.trail.length; i++) sctx.lineTo(p.trail[i].x, p.trail[i].y);
+      //sctx.strokeStyle = '#5DCAA540';
+	  sctx.strokeStyle = 'rgba(93, 202, 165, 0.9)';
+      sctx.lineWidth = 1;
+      sctx.stroke();
+    }
+    sctx.beginPath();
+    sctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    sctx.fillStyle = '#7F77DDcc';
+    sctx.fill();
+  }
+
+  const remain = Math.max(0, (interval - elapsed) / 1000);
+  document.getElementById('sTimer').textContent = remain.toFixed(1) + 's';
+  document.getElementById('prog').style.width   = (ratio * 100).toFixed(1) + '%';
+}
+
+function initChart() {
+  const isDark    = matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const textColor = isDark ? '#B4B2A9' : '#5F5E5A';
+  const binW      = (axisRange * 2) / NBINS;
+  const labels    = Array.from({ length: NBINS }, (_, i) =>
+    Math.round(-axisRange + (i + 0.5) * binW));
+
+  histChart = new Chart(document.getElementById('hist'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '実測分布', data: Array(NBINS).fill(0), backgroundColor: '#D85A3066', borderColor: '#D85A30', borderWidth: 0.5, barPercentage: 1.0, categoryPercentage: 1.0, order: 2 },
+        { label: '理論ガウス', data: Array(NBINS).fill(0), type: 'line', borderColor: '#378ADD', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.4, order: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 10 }, maxTicksLimit: 7, maxRotation: 0 }, grid: { color: gridColor }, title: { display: true, text: 'x 変位 (px)', color: textColor, font: { size: 11 } } },
+        y: { min: 0, max: yMax, ticks: { color: textColor, font: { size: 10 }, maxTicksLimit: 5 }, grid: { color: gridColor }, title: { display: true, text: '確率密度', color: textColor, font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+let frameCount = 0;
+function loop(now) {
+  if (now - lastResetTime >= getIntervalMs()) initParticles();
+  simStep();
+  drawSim(now);
+  frameCount++;
+  if (frameCount % 3 === 0) updateChart();
+  requestAnimationFrame(loop);
+}
+
+const reInit = () => initParticles();
+document.getElementById('nP').oninput       = e => { document.getElementById('nPOut').textContent = e.target.value; reInit(); };
+document.getElementById('tmp').oninput      = e => { document.getElementById('tmpOut').textContent = e.target.value; reInit(); };
+document.getElementById('vis').oninput      = e => { document.getElementById('visOut').textContent = e.target.value; reInit(); };
+document.getElementById('resetInt').oninput = e => { document.getElementById('resetIntOut').textContent = e.target.value; reInit(); };
+document.getElementById('resetBtn').onclick = reInit;
+
+initChart();
+initParticles();
+requestAnimationFrame(loop);
+</script>
