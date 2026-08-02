@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>みてたのしい科学 — 作品一覧</title>
+
+<!--
+  みてたのしい科学 / 作品まとめページ
+  記事と動画のデータは articles.js に分けてある。
+  ここ(index.html)はガワだけ。中身を足すときは articles.js を編集する。
+-->
+
+<style>
+  /* ---- 配色。暗めの背景に、青をアクセントで一色だけ ---- */
+  :root{
+    --bg:    #0b0e14;   /* ページ背景 */
+    --card:  #141926;   /* カードの面 */
+    --line:  #232a3a;   /* 枠線・区切り */
+    --text:  #e6ebf5;
+    --sub:   #9aa6bd;   /* 補足テキスト */
+    --accent:#5aa9ff;   /* リンク・選択中 */
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    /* Mac/iOSはヒラギノ、なければNoto。ゴシックで揃える */
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+    line-height:1.7;
+    padding:24px 16px 80px;
+  }
+
+  /* ---- ヘッダー（タイトルと絞り込み） ---- */
+  header{ max-width:1100px; margin:0 auto 28px; text-align:center; }
+
+  h1{
+    font-size:26px;
+    letter-spacing:.04em;
+    font-weight:800;
+  }
+  /* タイトル下の細い線。ちょっとした飾り */
+  h1::after{
+    content:"";
+    display:block;
+    width:40px; height:2px;
+    margin:12px auto 0;
+    background:var(--accent);
+    opacity:.7;
+  }
+  .lead{ color:var(--sub); font-size:14px; margin-top:14px; }
+
+  /* 絞り込みボタン。上段=大分類 / 下段=詳細 */
+  .filters{
+    display:flex; gap:8px; flex-wrap:wrap;
+    justify-content:center;
+    margin:22px 0 4px;
+  }
+  .filters button{
+    background:var(--card);
+    color:var(--sub);
+    border:1px solid var(--line);
+    padding:8px 18px;
+    border-radius:999px;
+    font-size:14px;
+    cursor:pointer;
+    transition:.15s;
+  }
+  .filters button:hover{ color:var(--text); }
+  .filters button.active{
+    background:var(--accent);
+    color:#06101f;
+    border-color:var(--accent);
+    font-weight:700;
+  }
+  .filters.sub{ margin-top:8px; }
+  .filters.sub button{ font-size:13px; padding:6px 14px; }  /* 詳細は少し小さめ */
+
+  /* ---- カードを並べるグリッド。幅に応じて列数が変わる ---- */
+  .grid{
+    max-width:1100px;
+    margin:24px auto 0;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    gap:18px;
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+    display:flex; flex-direction:column;
+    transition:.15s;
+  }
+  .card:hover{
+    transform:translateY(-3px);
+    border-color:var(--accent);
+    box-shadow:0 8px 24px rgba(0,0,0,.35);   /* 浮いて見えるように影を足す */
+  }
+
+  /* サムネ部分。縦動画に合わせて 9:16 で切り出す */
+  .thumb{
+    position:relative;
+    aspect-ratio:9/16;
+    max-height:340px;
+    background:#05070c;
+    display:flex; align-items:center; justify-content:center;
+    text-decoration:none;
+  }
+  .thumb img{ width:100%; height:100%; object-fit:cover; }
+  /* 再生ボタン風の丸。画像の上に重ねる */
+  .thumb .play{
+    position:absolute;
+    width:54px; height:54px;
+    border-radius:50%;
+    background:rgba(0,0,0,.55);
+    color:#fff; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;   /* クリックはリンク側に通す */
+  }
+  .thumb .noimg{ color:var(--sub); font-size:13px; padding:20px; text-align:center; }
+
+  /* カード下半分（テキスト） */
+  .body{ padding:14px 16px 18px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .title{ font-size:15px; font-weight:700; line-height:1.5; }
+  .summary{ font-size:13px; color:var(--sub); flex:1; }
+
+  .links{ display:flex; gap:10px; margin-top:6px; }
+  .links a{
+    font-size:13px;
+    text-decoration:none;
+    color:var(--accent);
+    border:1px solid var(--line);
+    padding:6px 12px;
+    border-radius:8px;
+    transition:.15s;
+  }
+  .links a:hover{ background:var(--accent); color:#06101f; }
+
+  footer{ max-width:1100px; margin:60px auto 0; text-align:center; color:var(--sub); font-size:12px; }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>みてたのしい科学</h1>
+  <p class="lead">物理・宇宙を、見て楽しむシミュレーションと記事。</p>
+
+  <!-- 大分類。今は宇宙と物性の2つ -->
+  <div class="filters" id="catFilter">
+    <button data-cat="all" class="active">すべて</button>
+    <button data-cat="宇宙">宇宙</button>
+    <button data-cat="物性">物性</button>
+  </div>
+
+  <!-- 詳細。宇宙まわりの内訳 -->
+  <div class="filters sub" id="subFilter">
+    <button data-sub="all" class="active">すべて</button>
+    <button data-sub="銀河">銀河</button>
+    <button data-sub="太陽系">太陽系</button>
+    <button data-sub="星々の動き">星々の動き</button>
+  </div>
+</header>
+
+<!-- カードはJSでここに流し込む -->
+<main class="grid" id="grid"></main>
+
+<footer>© みてたのしい科学 / kyo</footer>
+
+<!-- jQuery本体 → データ → 描画スクリプト の順で読む -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="articles.js"></script>
+<script>
+  $(function(){
+
+    // 選択中の絞り込み状態。ボタンを押すとここが書き換わる
+    var state = { cat:'all', sub:'all' };
+
+    var $grid = $('#grid');
+
+    // articles を state で絞ってカードを並べ直す
+    function render(){
+      $grid.empty();
+
+      var list = $.grep(articles, function(a){
+        var okCat = (state.cat === 'all' || a.cat === state.cat);
+        var okSub = (state.sub === 'all' || a.sub === state.sub);
+        return okCat && okSub;
+      });
+
+      $.each(list, function(i, a){
+        // 動画があればサムネを出す。なければ枠は残して中身は空にする
+        var thumb = a.yt
+          ? '<a class="thumb" href="https://youtube.com/shorts/' + a.yt + '" target="_blank">'
+              + '<img src="https://i.ytimg.com/vi/' + a.yt + '/hqdefault.jpg" loading="lazy" alt="">'
+              + '<span class="play">▶</span>'
+            + '</a>'
+          : '<div class="thumb"></div>';
+
+        // リンクは「あるものだけ」出す（記事なし/動画なしの両対応）
+        var noteLink = a.note ? '<a href="' + a.note + '" target="_blank">note記事</a>' : '';
+        var ytLink   = a.yt   ? '<a href="https://youtube.com/shorts/' + a.yt + '" target="_blank">動画</a>' : '';
+
+        $grid.append(
+          '<article class="card">'
+            + thumb
+            + '<div class="body">'
+              + '<div class="title">' + a.title + '</div>'
+              + '<div class="summary">' + a.summary + '</div>'
+              + '<div class="links">' + noteLink + ytLink + '</div>'
+            + '</div>'
+          + '</article>'
+        );
+      });
+
+      // 絞り込んで0件だったときのフォロー
+      if(list.length === 0){
+        $grid.html('<p style="grid-column:1/-1;text-align:center;color:var(--sub)">該当する作品はありません。</p>');
+      }
+    }
+
+    // 上段ボタン（大分類）を押したとき
+    $('#catFilter button').on('click', function(){
+      $('#catFilter .active').removeClass('active');
+      $(this).addClass('active');
+      state.cat = $(this).data('cat');
+      render();
+    });
+
+    // 下段ボタン（詳細）を押したとき
+    $('#subFilter button').on('click', function(){
+      $('#subFilter .active').removeClass('active');
+      $(this).addClass('active');
+      state.sub = $(this).data('sub');
+      render();
+    });
+
+    // 最初の描画
+    render();
+
+  });
+</script>
+
+</body>
+</html>
