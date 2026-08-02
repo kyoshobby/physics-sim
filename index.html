@@ -145,10 +145,15 @@
 
   /* ---- スマホ幅では確実に1列・全幅にする ---- */
   @media (max-width:600px){
-    .grid{ grid-template-columns:1fr; }
+    /* 本文の左右パディングを外して、カードを画面の端まで（横幅100%）に */
+    body{ padding-left:0; padding-right:0; }
+    header{ padding:0 14px; }          /* 文字は端に貼り付かないよう少しだけ余白 */
+    .grid{ grid-template-columns:1fr; gap:12px; padding:0; }
+    .card{ border-radius:0; }          /* 端まで伸ばすので角丸は外す */
     /* 縦長サムネが縦に伸びすぎないよう、スマホでは高さを抑えて中央を表示 */
-    .thumb{ max-height:70vh; }
+    .thumb{ max-height:80vh; }
     .thumb img{ object-position:center; }
+    footer{ padding:0 14px; }
   }
 </style>
 </head>
