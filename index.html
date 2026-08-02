@@ -83,7 +83,8 @@
     max-width:1100px;
     margin:24px auto 0;
     display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    /* auto-fit にすると、カードが少なくても横幅いっぱいに広がる（右の余白が出ない） */
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
     gap:18px;
   }
 
@@ -141,6 +142,14 @@
   .links a:hover{ background:var(--accent); color:#06101f; }
 
   footer{ max-width:1100px; margin:60px auto 0; text-align:center; color:var(--sub); font-size:12px; }
+
+  /* ---- スマホ幅では確実に1列・全幅にする ---- */
+  @media (max-width:600px){
+    .grid{ grid-template-columns:1fr; }
+    /* 縦長サムネが縦に伸びすぎないよう、スマホでは高さを抑えて中央を表示 */
+    .thumb{ max-height:70vh; }
+    .thumb img{ object-position:center; }
+  }
 </style>
 </head>
 
