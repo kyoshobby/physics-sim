@@ -105,16 +105,17 @@
     box-shadow:0 8px 24px rgba(0,0,0,.35);   /* 浮いて見えるように影を足す */
   }
 
-  /* サムネ部分。縦動画に合わせて 9:16 で切り出す */
+  /* サムネ部分。YouTubeの標準サムネ(16:9)に合わせた枠 */
   .thumb{
     position:relative;
-    aspect-ratio:9/16;
-    max-height:340px;
+    aspect-ratio:16/9;
     background:#05070c;
     display:flex; align-items:center; justify-content:center;
     text-decoration:none;
   }
-  .thumb img{ width:100%; height:100%; object-fit:cover; }
+  .thumb img{ width:100%; height:100%; object-fit:cover; object-position:center; }
+  /* 動画がないカードは、サムネ枠の中央に「動画なし」と出す */
+  .thumb-none{ color:var(--sub); font-size:13px; }
   /* 再生ボタン風の丸。画像の上に重ねる */
   .thumb .play{
     position:absolute;
@@ -143,6 +144,14 @@
     transition:.15s;
   }
   .links a:hover{ background:var(--accent); color:#06101f; }
+  /* リンクにできない「記事なし」表示。破線枠で「無い」感を出す */
+  .links .nolink{
+    font-size:13px;
+    color:#aeb8cc;
+    border:1px dashed var(--line);
+    padding:6px 12px;
+    border-radius:8px;
+  }
 
   footer{ max-width:1100px; margin:60px auto 0; text-align:center; color:var(--sub); font-size:12px; }
 
@@ -213,17 +222,17 @@
         // 動画があればサムネを出す。なければ枠は残して中身は空にする
         var thumb = a.yt
           ? '<a class="thumb" href="https://youtube.com/shorts/' + a.yt + '" target="_blank">'
-              // まず Shorts の縦サムネ(oardefault)を試し、無ければ従来サムネ(hqdefault)に戻す
-              + '<img src="https://i.ytimg.com/vi/' + a.yt + '/oardefault.jpg"'
-              + ' onerror="this.onerror=null;this.src=\'https://i.ytimg.com/vi/' + a.yt + '/hqdefault.jpg\'"'
-              + ' loading="lazy" alt="">'
+              // 全動画で必ず存在する標準サムネ(16:9)を使う
+              + '<img src="https://i.ytimg.com/vi/' + a.yt + '/hqdefault.jpg" loading="lazy" alt="">'
               + '<span class="play">▶</span>'
             + '</a>'
-          : '<div class="thumb"></div>';
+          : '<div class="thumb"><span class="thumb-none">動画なし</span></div>';
 
-        // リンクは「あるものだけ」出す（記事なし/動画なしの両対応）
-        var noteLink = a.note ? '<a href="' + a.note + '" target="_blank">note記事</a>' : '';
-        var ytLink   = a.yt   ? '<a href="https://youtube.com/shorts/' + a.yt + '" target="_blank">動画</a>' : '';
+        // 記事があればリンク、なければ「記事なし」と表示する
+        var noteLink = a.note
+          ? '<a href="' + a.note + '" target="_blank">note記事</a>'
+          : '<span class="nolink">記事なし</span>';
+        var ytLink   = a.yt ? '<a href="https://youtube.com/shorts/' + a.yt + '" target="_blank">動画</a>' : '';
 
         $grid.append(
           '<article class="card">'
