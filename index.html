@@ -24,6 +24,9 @@
 
   *{ box-sizing:border-box; margin:0; padding:0; }
 
+  /* iOS Safariで右に出る横スクロール（余白）を抑える */
+  html,body{ overflow-x:hidden; max-width:100%; }
+
   body{
     background:var(--bg);
     color:var(--text);
@@ -210,7 +213,10 @@
         // 動画があればサムネを出す。なければ枠は残して中身は空にする
         var thumb = a.yt
           ? '<a class="thumb" href="https://youtube.com/shorts/' + a.yt + '" target="_blank">'
-              + '<img src="https://i.ytimg.com/vi/' + a.yt + '/hqdefault.jpg" loading="lazy" alt="">'
+              // まず Shorts の縦サムネ(oardefault)を試し、無ければ従来サムネ(hqdefault)に戻す
+              + '<img src="https://i.ytimg.com/vi/' + a.yt + '/oardefault.jpg"'
+              + ' onerror="this.onerror=null;this.src=\'https://i.ytimg.com/vi/' + a.yt + '/hqdefault.jpg\'"'
+              + ' loading="lazy" alt="">'
               + '<span class="play">▶</span>'
             + '</a>'
           : '<div class="thumb"></div>';
